@@ -1,0 +1,1 @@
+# lazyman-stock-research-web-app

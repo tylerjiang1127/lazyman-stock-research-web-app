@@ -9,6 +9,7 @@ import pandas as pd
 import talib
 import numpy as np
 from dateutil.relativedelta import *
+from pytz import timezone
 
 ## import Dash
 import dash_core_components as dcc
@@ -1631,8 +1632,8 @@ def update_indexes(n):
     sp_price_style    , sp_change_style     = market_index_style(sp_change), market_index_style(sp_change)
     rut_price_style   , rut_change_style    = market_index_style(rut_change), market_index_style(rut_change)
     
-    current_time = dt.datetime.today()
-    current_time_adj = dt.datetime.today().strftime("%A, %b %d, %Y, %I:%M %p")
+    eastern = timezone('US/Eastern')
+    current_time_adj = dt.datetime.now(eastern).strftime("%A, %b %d, %Y, %I:%M %p")
     current_time_adj = current_time_adj+' (EST)'
 
     if df.iloc[0][3][:8].upper() == "AT CLOSE":

@@ -1216,6 +1216,7 @@ def update_chart(n_clicks, input_value, start_date, end_date):
     
     ## set up timeframe
     start_date_object, end_date_object = dt.date.fromisoformat(start_date), dt.date.fromisoformat(end_date)
+    end_date_object = end_date_object + dt.timedelta(days=1)
     start_date, end_date = start_date_object.strftime("%Y-%m-%d"), end_date_object.strftime("%Y-%m-%d")
     
     ## get the historical stock data for this ticker and also this ticker's info

@@ -1,3 +1,4 @@
+
 ### Yahoo Finanace
 import yfinance as yf
 import plotly
@@ -11,12 +12,12 @@ import numpy as np
 from dateutil.relativedelta import *
 from pytz import timezone
 
-## import Dash
-import dash_core_components as dcc
+
 import dash_bootstrap_components as dbc
 import dash
-import dash_html_components as html
-import dash_table
+from dash import dcc
+from dash import html
+from dash import dash_table
 from dash.dependencies import Input, Output, State
 import time
 import plotly.io as pio
@@ -25,6 +26,8 @@ pio.renderers.default='notebook'
 import requests
 from requests.exceptions import ConnectionError
 from bs4 import BeautifulSoup
+
+
 
 def get_info(ticker):
     try:
@@ -38,7 +41,7 @@ def get_info(ticker):
             elif company_overview['trailingEps']<=0:
                 return 'N/A'
             else:
-                return "%.2f" % float(company_overview['regularMarketPrice'] / company_overview['trailingEps'])
+                return "%.2f" % float(company_overview['regularMarketPreviousClose'] / company_overview['trailingEps'])
         def get_psratio():
             if company_overview['priceToSalesTrailing12Months'] is None:
                 return 'N/A'
@@ -89,32 +92,33 @@ def get_info(ticker):
         return company_info, company_desc
 
 
+
 def fundamentals_prep(ticker, period):
     try:
         ## Starting Tables
         ticker = yf.Ticker(ticker)
         if period == 'Yearly':
-            income_statement = ticker.financials.transpose()
+            income_statement = ticker.incomestmt.transpose()
             balance_sheet    = ticker.balancesheet.transpose()
             cash_flow        = ticker.cashflow.transpose()
         elif period == 'Quarterly':
-            income_statement = ticker.quarterly_financials.transpose()
+            income_statement = ticker.quarterly_incomestmt.transpose()
             balance_sheet    = ticker.quarterly_balancesheet.transpose()
             cash_flow        = ticker.quarterly_cashflow.transpose()
         else:
             income_statement,balance_sheet,cash_flow = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
+        
         income_statement = income_statement.rename_axis('fiscalDateEnding').reset_index(inplace=False)
         balance_sheet    = balance_sheet.rename_axis('fiscalDateEnding').reset_index(inplace=False)
         cash_flow        = cash_flow.rename_axis('fiscalDateEnding').reset_index(inplace=False)
-
+        
         income_statement['fiscalDateEnding'] = income_statement['fiscalDateEnding'].dt.strftime('%Y-%m-%d')
         balance_sheet['fiscalDateEnding']    = balance_sheet['fiscalDateEnding'].dt.strftime('%Y-%m-%d')
         cash_flow['fiscalDateEnding']        = cash_flow['fiscalDateEnding'].dt.strftime('%Y-%m-%d')
-
+        
         ## Querry the Currency Unit
-        currency = ticker.info['currency']
-
+        currency = ticker.info['financialCurrency']
+        
         ## Convert all None value to '0'
         income_statement = income_statement.fillna(value = 0)
         balance_sheet    = balance_sheet.fillna(value = 0)
@@ -130,35 +134,43 @@ def fundamentals_prep(ticker, period):
         IncomeStatement['Gross Margin']     = IncomeStatement['Gross Profit']/IncomeStatement['Total Revenue']
         IncomeStatement['Operating Margin'] = IncomeStatement['Operating Income']/IncomeStatement['Total Revenue']
         IncomeStatement['Net Profit Margin'] = IncomeStatement['Net Income']/IncomeStatement['Total Revenue']
-
-
+        
         ## Balance Sheet Data processing
-        BalanceSheet = balance_sheet[['fiscalDateEnding','Total Assets','Total Liab','Total Stockholder Equity','Cash',
-                                      'Total Current Assets','Total Current Liabilities']].iloc[:8]
-        BalanceSheet[['Total Assets','Total Liab','Total Stockholder Equity','Cash',
-                      'Total Current Assets','Total Current Liabilities']] = BalanceSheet[['Total Assets','Total Liab','Total Stockholder Equity','Cash',
-                                                                                          'Total Current Assets','Total Current Liabilities']].astype(float)
-
+        BalanceSheet = balance_sheet[['fiscalDateEnding','Total Assets','Total Liabilities Net Minority Interest','Stockholders Equity','Cash And Cash Equivalents',
+                                      'Current Assets','Current Liabilities']].iloc[:8]
+        BalanceSheet[['Total Assets','Total Liabilities Net Minority Interest','Stockholders Equity','Cash And Cash Equivalents',
+                      'Current Assets','Current Liabilities']] = BalanceSheet[['Total Assets','Total Liabilities Net Minority Interest','Stockholders Equity','Cash And Cash Equivalents',
+                                                                                          'Current Assets','Current Liabilities']].astype(float)
+        BalanceSheet.columns = ['fiscalDateEnding','Total Assets','Total Liab','Total Stockholder Equity','Cash',
+                                      'Total Current Assets','Total Current Liabilities']
+        
         BalanceSheet['Cash Ratio'] = BalanceSheet['Cash']/BalanceSheet['Total Current Liabilities']
         BalanceSheet['Current Ratio'] = BalanceSheet['Total Current Assets']/BalanceSheet['Total Current Liabilities']
+        
 
+        
         ## Cash Flow Data processing
-        CashFlow = cash_flow[['fiscalDateEnding','Total Cash From Operating Activities','Total Cashflows From Investing Activities',
-                              'Total Cash From Financing Activities','Capital Expenditures']].iloc[:8]
-        CashFlow[['Total Cash From Operating Activities','Total Cashflows From Investing Activities',
-                  'Total Cash From Financing Activities','Capital Expenditures']] = CashFlow[['Total Cash From Operating Activities','Total Cashflows From Investing Activities',
-                                                                                              'Total Cash From Financing Activities','Capital Expenditures']].astype(float)
+        CashFlow = cash_flow[['fiscalDateEnding','Operating Cash Flow','Investing Cash Flow',
+                              'Financing Cash Flow','Capital Expenditure']].iloc[:8]
+        CashFlow[['Operating Cash Flow','Investing Cash Flow',
+                  'Financing Cash Flow','Capital Expenditure']] = CashFlow[['Operating Cash Flow','Investing Cash Flow',
+                                                                                              'Financing Cash Flow','Capital Expenditure']].astype(float)        
+        CashFlow.columns = ['fiscalDateEnding','Total Cash From Operating Activities','Total Cashflows From Investing Activities',
+                              'Total Cash From Financing Activities','Capital Expenditures']
+        
         CashFlow['Free Cash Flow'] = CashFlow['Total Cash From Operating Activities'] + CashFlow['Capital Expenditures']
         CashFlow['OperatingCashflow/SalesRatio'] = CashFlow['Total Cash From Operating Activities']/IncomeStatement['Total Revenue']
+        
 
+        
         return IncomeStatement, BalanceSheet, CashFlow, currency
     except:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), ''
 
 def fundamentals_tables(ticker, period):
-
+    
     IncomeStatement, BalanceSheet, CashFlow, currency = fundamentals_prep(ticker, period)
-
+    
     ## df1, df2, df3 are the three tables used for Most recnet Quarter Fundamental Part
     if IncomeStatement.empty:
         df1 = df2 = df3 = pd.DataFrame()
@@ -174,7 +186,7 @@ def fundamentals_tables(ticker, period):
             else:
                 value_conv = "{:.1%}".format(value)
             row = {'KPI':last_incomestatement.index[key],'Value':value_conv}
-            df1 = df1.append(row,ignore_index = True)
+            df1 = pd.concat([df1,pd.DataFrame([row])], ignore_index = True)
         df1['KPI'] = ['Total Revenue','Cost Of Revenue','Gross Profit','Operating Income','Net Income','Gross Margin','Operating Margin','Net Profit Margin']
 
         df2 = pd.DataFrame(columns=['KPI','Value'])
@@ -183,11 +195,11 @@ def fundamentals_tables(ticker, period):
             if key<=5 and abs(value) > 100000000:
                 value_conv = format(int("%.0f" % (value/1000000)),',') + ' M'
             elif key<=5 and abs(value) <= 100000000:
-                value_conv = format(int("%.0f" % value),',')
+                value_conv = format(int("%.0f" % value),',')                
             else:
                 value_conv = "%.2f" % value
             row = {'KPI':last_balancesheet.index[key],'Value':value_conv}
-            df2 = df2.append(row,ignore_index = True)
+            df2 = pd.concat([df2,pd.DataFrame([row])], ignore_index = True)
         df2['KPI'] = ['Total Assets','Total Liabilities','Total Shareholder Equity','Cash And Cash Equivalents','Total Current Assets','Total Current Liabilities','Cash Ratio','Current Ratio']
 
         df3 = pd.DataFrame(columns=['KPI','Value'])
@@ -196,13 +208,13 @@ def fundamentals_tables(ticker, period):
             if key<=4 and abs(value) > 100000000:
                 value_conv = format(int("%.0f" % (value/1000000)),',') + ' M'
             elif key<=4 and abs(value) <= 100000000:
-                value_conv = format(int("%.0f" % value),',')
+                value_conv = format(int("%.0f" % value),',')                
             else:
                 value_conv = "%.2f" % value
             row = {'KPI':last_cashflow.index[key],'Value':value_conv}
-            df3 = df3.append(row,ignore_index = True)
+            df3 = pd.concat([df3,pd.DataFrame([row])], ignore_index = True)
         df3['KPI'] = ['Operating Cash flow','Cash Flow From Investment','Cash Flow From Financing','Capital Expenditures','Free Cash Flow','Operating Cash Flow/Sales Ratio']
-
+            
     return IncomeStatement, BalanceSheet, CashFlow, df1, df2, df3, currency
 
 def make_dash_table(df):
@@ -214,6 +226,7 @@ def make_dash_table(df):
             html_row.append(html.Td([row[i]]))
         table.append(html.Tr(html_row))
     return table
+
 
 
 ## Figures Part
@@ -270,7 +283,7 @@ def incomestatement_bar(df):
             bargap=0.35,
             font={"family": "Raleway", "size": 10},
             height=300,
-            width=600,
+            width=600,           
             legend={
                 "x": -0.09,
                 "y": -0.19,
@@ -285,7 +298,7 @@ def incomestatement_bar(df):
                 "l": 10,
             },
             showlegend=True,
-            title="",
+            title="", 
             hovermode="closest",
             xaxis={
                 "autorange": True,
@@ -334,7 +347,7 @@ def incomestatement_line(df):
             autosize=True,
             font={"family": "Raleway", "size": 10},
             height=300,
-            width=400,
+            width=400,           
             legend={
                 "x": -0.09,
                 "y": -0.19,
@@ -349,7 +362,7 @@ def incomestatement_line(df):
                 "l": 10,
             },
             showlegend=True,
-            title="",
+            title="", 
             hovermode="closest",
             xaxis={
                 "autorange": True,
@@ -406,7 +419,7 @@ def balancesheet_stackbar(df):
             bargap=0.35,
             font={"family": "Raleway", "size": 10},
             height=300,
-            width=600,
+            width=600,           
             legend={
                 "x": -0.09,
                 "y": -0.19,
@@ -465,7 +478,7 @@ def balancesheet_line(df):
             autosize=True,
             font={"family": "Raleway", "size": 10},
             height=300,
-            width=400,
+            width=400,           
             legend={
                 "x": -0.09,
                 "y": -0.19,
@@ -480,7 +493,7 @@ def balancesheet_line(df):
                 "l": 10,
             },
             showlegend=True,
-            title="",
+            title="", 
             hovermode="closest",
             xaxis={
                 "autorange": True,
@@ -531,7 +544,7 @@ def cashflow_bar(df):
             bargap=0.35,
             font={"family": "Raleway", "size": 10},
             height=300,
-            width=600,
+            width=600,           
             legend={
                 "x": -0.09,
                 "y": -0.19,
@@ -546,7 +559,7 @@ def cashflow_bar(df):
                 "l": 10,
             },
             showlegend=True,
-            title="",
+            title="", 
             hovermode="closest",
             xaxis={
                 "autorange": True,
@@ -581,7 +594,7 @@ def cashflow_line(df):
             autosize=True,
             font={"family": "Raleway", "size": 10},
             height=300,
-            width=400,
+            width=400,           
             legend={
                 "x": -0.09,
                 "y": -0.19,
@@ -596,9 +609,9 @@ def cashflow_line(df):
                 "l": 10,
             },
             showlegend=True,
-            title="",
+            title="", 
             hovermode="closest",
-            xaxis={
+            xaxis={ 
                 "autorange": True,
                 "showline": True,
                 "title": "As of Fiscal Ending Date",
@@ -619,6 +632,7 @@ def cashflow_line(df):
     }
 
 
+
 ## get the tickers and company name lists https://www.nasdaq.com/market-activity/stocks/screener
 
 all_lists = pd.read_csv("https://github.com/tylerjiang1127/Stock-Tickers/blob/main/all_tickers.csv?raw=true", usecols=["Symbol","Name"])
@@ -629,6 +643,8 @@ ticker_options=[
         {'label': all_lists.iloc[i][2], 'value': all_lists.iloc[i][0]} for i in range(len(all_lists))
         ]
 
+
+
 ## Stock Market Live Prep
 
 # get the realtime price and change for 
@@ -636,7 +652,9 @@ ticker_options=[
 def market_index(name_ind):
     name = name_ind.upper()
     url = 'https://finance.yahoo.com/quote/%5E'+name+'?p=%5E'+name
-    page = requests.get(url)
+    headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36' } 
+
+    page = requests.get(url, headers=headers)
     web_content = BeautifulSoup(page.text, 'lxml')
     web_content_div = web_content.find_all('div', attrs = {'class':'D(ib) Mend(20px)'})
     spans = web_content_div[0].find_all('span')
@@ -651,7 +669,7 @@ def update_market_index():
     for ind in list:
         price, change, market_status = market_index(ind)
         row = pd.DataFrame([[ind, price, change, market_status]], columns = column_names)
-        df = df.append(row, ignore_index=True)
+        df = pd.concat([df,row], ignore_index = True)
     return df
 
 ## get the 1minute level data for the most recent trading day
@@ -777,15 +795,19 @@ def market_index_style(change):
     green_style = {'color' : 'green', 'font-size': '15px', 'font-weight': 'bold'}    
     red_style   = {'color' : 'red', 'font-size': '15px', 'font-weight': 'bold'}    
     grey_style   = {'color' : 'grey', 'font-size': '15px', 'font-weight': 'bold'} 
-    if change[0] == '-':
+#     if change[0] == '-':
+#         return red_style
+#     elif change[0] == '+':
+#         return green_style
+    if '-' in change:
         return red_style
-    elif change[0] == '+':
+    elif '+' in change:
         return green_style
     else:
         return grey_style
 
     
-cards = dbc.CardDeck([
+cards = [
         # NASDAQ Part
         dbc.Card(
             dbc.CardBody(
@@ -833,9 +855,9 @@ cards = dbc.CardDeck([
                 ]
             ),
             className="attributes_card three columns"),        
-    ])
-	
-	
+    ]
+
+
 
 ## Pages Layout Create Functions
 def fundamental_create_layout(app):
@@ -910,7 +932,7 @@ def marketlive_create_layout(app):
 
                      ], ),            
         ]
-		
+
 
 
 ## KDJ Formula
@@ -927,7 +949,7 @@ def KDJ(H, L, C, df):
             k_out.append(k0)
         else:
             k_out.append(np.nan)
-
+    
     d0 = 50
     d_out = []
     for j in range(len(RSV)):
@@ -936,9 +958,9 @@ def KDJ(H, L, C, df):
             d_out.append(d0)
         else:
             d_out.append(np.nan)
-
+    
     J = (3 * np.array(k_out)) - (2 * np.array(d_out))
-
+    
     kdj = pd.concat([pd.Series(k_out, name = 'K'), pd.Series(d_out, name = 'D'), pd.Series(J, name = 'J')], axis=1)
     kdj.set_index(df.index, inplace=True)
     return kdj
@@ -946,11 +968,11 @@ def KDJ(H, L, C, df):
 def get_indicators(df):
     # 创建dataframe
     tech = pd.DataFrame()
-
+    
     #获取macd
     tech["macd"], tech["macd_signal"], tech["macd_hist"] = talib.MACD(df['Close'])
     tech["macd_hist"] = tech["macd_hist"]*2
-
+ 
     #获取均线(MA5, MA10, MA20, MA30, MA60, MA120, MA250)
     tech["ma5"]   = talib.MA(df["Close"], timeperiod=5)
     tech["ma10"]  = talib.MA(df["Close"], timeperiod=10)
@@ -959,10 +981,10 @@ def get_indicators(df):
     tech["ma60"]  = talib.MA(df["Close"], timeperiod=60)
     tech["ma120"] = talib.MA(df["Close"], timeperiod=120)
     tech["ma250"] = talib.MA(df["Close"], timeperiod=250)
-
+ 
     #获取rsi
     tech["rsi"] = talib.RSI(df["Close"])
-
+    
     #KDJ
     H = df['High']
     L = df['Low']
@@ -971,7 +993,7 @@ def get_indicators(df):
     tech["K"] = kdj['K']
     tech["D"] = kdj['D']
     tech["J"] = kdj['J']
-
+    
     return tech
 
 ## set up color difference for Up&Down day price change
@@ -988,6 +1010,7 @@ def macd_hist_color(tech):
     color[tech['macd_hist']<0] = 'red'
     color[tech['macd_hist']==0] = 'grey'
     return color
+
 
 
 ## Layout Design and Interactive Design
@@ -1732,6 +1755,6 @@ def update_indexes(n):
     
     return fig1, fig2, fig3, fig4
 
-
 if __name__ == '__main__':
      app.run_server(debug=False)
+
